@@ -29,6 +29,7 @@ const fetch_retry = async (
   t = TIMEOUT,
   exp = true
 ) => {
+  console.log("fetch retry");
   for (let i = 0; i < n; i++) {
     try {
       return await fetch(url, options);
@@ -84,6 +85,7 @@ export default class NetworkLayer {
 
   sendFeedback(context, event) {
     console.log("sendFeedback");
+    console.log(context);
     if (context.staged_SAI === null) {
       console.error("cannot give feedback on no action.");
     }
@@ -170,7 +172,6 @@ export default class NetworkLayer {
 
 
   sendTrainingData(data, agent_id) {
-    console.log("sendTrainingData");
     // console.log("SAI: ", sai_data)
 
     // loggingLibrary.logResponse (transactionID,"textinput1","UpdateTextField","Hello World","RESULT","CORRECT","You got it!");
@@ -197,7 +198,9 @@ export default class NetworkLayer {
   }
 
   queryApprentice(context, event) {
-    console.log("queryApprentice");
+    console.log("query apprentice");
+    console.log(context);
+    console.log(event);
 
     var data = {
       state: context.state
@@ -209,7 +212,6 @@ export default class NetworkLayer {
     this.request_history.push(data);
 
     const URL = this.AL_URL + "/request/" + context.agent_id + "/";
-
     return fetch_retry(URL, {
       method: "POST",
       headers: JSON_HEADERS,
@@ -218,8 +220,6 @@ export default class NetworkLayer {
   }
 
   checkApprentice(context, event) {
-    console.log("checkApprentice");
-
     var data = {
       state: context.state,
       ...context.staged_SAI
@@ -376,8 +376,6 @@ export default class NetworkLayer {
       outer_loop_args: controller["args"] || controller["outer_loop_args"],
       id: context.agent_id
     };
-
-
 
     console.log(this.OUTER_LOOP_URL);
     console.log("outer loop data:", data);

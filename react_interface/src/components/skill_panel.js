@@ -56,7 +56,6 @@ const match_text_by_action = {
   }                          
 }
 
-
 class SkillPanel extends Component{
   constructor(props){
         super(props);
@@ -81,7 +80,6 @@ class SkillPanel extends Component{
       let first_key = Object.keys(this.s_skill_set)[0];
       return first_key==null ? null : this.s_skill_set[first_key][0];
     }
-
   }
 
   structure_skills(skill_set){
@@ -138,6 +136,11 @@ class SkillPanel extends Component{
     }
     
   }
+
+  getSelectedSkill() {
+    return this.state.selected_skill;
+  }
+
   handleToggleFeedbackButton(evt,rest){
     const [skill,match,label] = rest;
     this.props.interactions_service.send(

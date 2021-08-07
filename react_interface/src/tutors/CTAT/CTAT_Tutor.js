@@ -900,6 +900,10 @@ class CTAT_Tutor extends React.Component {
   } = {}) {
     var relative_pos_cache = this.relative_pos_cache;
     var HTML_PATH = this.HTML_PATH;
+
+    if (this.iframe_content == undefined) {
+      return undefined;
+    }
     var state_array = this.iframe_content.$("div").toArray();
     // state_array.push({current_task: current_task});
 

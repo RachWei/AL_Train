@@ -12,9 +12,10 @@ import { interpret } from 'xstate';
 import autobind from 'class-autobind';
 import path from 'path';
 import pick from 'object.pick';
+import Graph from './components/graph.js'
 
 // 
-import React from 'react';
+import React, {useState, useEffect} from 'react';
 import Spinner from 'react-native-loading-spinner-overlay';
 // import "react-loader-spinner/dist/loader/css/react-spinner-loader.css"
 // import Loader from 'react-loader-spinner'
@@ -22,7 +23,193 @@ import Spinner from 'react-native-loading-spinner-overlay';
 // import logo from './logo.svg';
 // import './App.css';
 
-import { TouchableHighlight,ScrollView,View, Text, Platform, StyleSheet,SectionList,AppRegistry } from "react-native";
+import { TouchableHighlight,ScrollView,View, Text, Platform, StyleSheet,SectionList,AppRegistry, Linking } from "react-native";
+import { style } from 'd3';
+
+//index of current starting state in the starting state history
+let startingStateCount = 0;
+
+//uncertain data
+var dataUncertain = {
+  "certain": false,
+  "nextID": 0,
+  "startingNodeID" : -1,
+  "endingNodeID" : -1,
+  "currentNodeID" : -1,
+  "nodes": [
+  ],
+  "links" : [
+  ]
+}
+
+var dataCertain = {
+  "certain": true,
+  "nextID": 0,
+  "startingNodeID" : -1,
+  "endingNodeID" : -1,
+  "currentNodeID" : -1,
+  "nodes": [
+  ],
+  "links" : [
+  ]
+}
+
+function createNode(name, id, show, data) {
+  let newNode = {
+    "name": name,
+    "id": id,
+    "show": show,
+    "data": data
+  }
+  return newNode;
+}
+
+function createLink(source, target, skill, correct) {
+  let newLink = {
+    "source": source,
+    "target": target,
+    "skill": skill,
+    "correct": correct
+  }
+  return newLink;
+}
+
+//add node and link to graph
+function addToGraph(node, link, start = false, current = true, end = false, data) {
+
+  if (start) {
+    let startID = node.id;
+
+    if (doesNodeExist(node, data.nodes)) {
+      startID = getNodeIDWithSameContent(node, data.nodes);
+      if (startID == undefined) startID = node.id;
+    } else {
+      data.nodes.push(node);
+      data.nextID++;
+    }
+
+    data.startingNodeID = startID;
+    
+  } else if (!start && data.startingNodeID != -1){
+    addNodeAndLinkToGraph(node, link, data);
+  }
+}
+
+//helper function that adds node and link to data
+function addNodeAndLinkToGraph(node, link, data) {
+  let nodeIDWithSameContent = getNodeIDWithSameContent(node, data.nodes);
+  let isOriginal = nodeIDWithSameContent == undefined;
+
+  if (nodeIDWithSameContent == undefined) nodeIDWithSameContent = node.id;
+
+  link.target = nodeIDWithSameContent;
+  let sourceNode = getNodeWithID(link.source, data.nodes);
+  let targetNode = getNodeWithID(link.target, data.nodes);
+
+  if (targetNode == undefined) {
+    targetNode = node;
+  }
+
+  let differences = numDifferences(sourceNode, targetNode);
+
+  if (isOriginal && differences[0] != undefined) {
+    data.nodes.push(node);
+    data.nextID++;
+  }
+  
+  if (!doesLinkExist(link, data.links) && differences[0] != undefined) {
+    link["new"] = differences[0];
+    data.links.push(link);
+
+  } else if (doesLinkExist(link, data.links) && !data.certain) {
+    let identicalLink = getIdenticalLink(link, data.links);
+    if (!identicalLink.correct) {
+      identicalLink.correct = link.correct;
+    }
+  }
+}
+
+//gets id of node with same content
+function getNodeIDWithSameContent(node, nodes) {
+  for (let i = 0; i < nodes.length; i++) {
+    let compareNode = nodes[i];
+
+    if (numDifferences(node, compareNode).length == 0) {
+        return compareNode.id;
+    }
+  }
+  return undefined;
+}
+
+//checks if node with same data exists already
+function doesNodeExist(node, nodes) {
+  for (let i = 0; i < nodes.length; i++) {
+    let compareNode = nodes[i];
+    let differences = numDifferences(node, compareNode);
+
+    if (differences.length == 0) {
+        return true;
+    }
+  }
+  return false;
+}
+
+//checks if node with specific id exists
+function getNodeWithID(id, nodes) {
+  for (let i = 0; i < nodes.length; i++) {
+    let compareNode = nodes[i];
+    if (compareNode.id == id) {
+        return compareNode;
+    }
+  }
+  return undefined;
+}
+
+//checks if link already exists with same source + target
+function doesLinkExist(link, links) {
+  for (let i = 0; i < links.length; i++) {
+  let compareLinks = links[i];
+    if (isSameLink(link, compareLinks)) {
+        return true;
+    }
+  }
+  return false;
+}
+
+//returns the identical link if it exists
+function getIdenticalLink(link, links) {
+  for (let i = 0; i < links.length; i++) {
+    let compareLinks = links[i];
+      if (isSameLink(link, compareLinks)) {
+          return compareLinks
+      }
+    }
+    return undefined;
+}
+
+
+//returns the differences of two nodes
+function numDifferences(node1, node2) {
+  let differences = [];
+
+  if (node1 != undefined && node2 != undefined) {
+    Object.keys(node1.data).forEach(key => {
+      if(node1.data[key].value != node2.data[key].value){
+        //depends if you want to show the done or hint links
+        // if (key != "done" && key != "hint") {
+          differences.push(node2.data[key].id + ": " + node2.data[key].value);
+        // }
+      }
+   });
+  }
+  
+  return differences;
+}
+
+function isSameLink(link1, link2) {
+  return link1.source == link2.source && link1.target == link2.target;
+}
+
 
 
 // const instructions = Platform.select({
@@ -67,8 +254,6 @@ function shallow_diff(o1,o2,keys=null){
   return diff
 }
 
-
-
 export default class ALReactInterface extends React.Component {
   constructor(props){
     super(props);
@@ -79,6 +264,7 @@ export default class ALReactInterface extends React.Component {
     // this.AL_URL = this.urlParams.get('al_url');
     // this.HOST_URL = window.location.origin
     // console.log(this.AL_URL + '/create/',this.HOST_URL)
+
     this.network_layer = new NetworkLayer(props.AL_URL,props.HOST_URL,props.OUTER_LOOP_URL)
     
     // this.training_file = this.urlParams.get('training');
@@ -93,6 +279,11 @@ export default class ALReactInterface extends React.Component {
     this.tutor = React.createRef()
     this.skill_panel = React.createRef()
     this.buttons = React.createRef()
+    this.graphData = React.createRef()
+    this.graphData = dataUncertain;
+    this.graphdataCertain = React.createRef()
+    this.graphdataCertain = dataCertain;
+    this.toggle = false;
 
     this.state = {
       default_props: {},
@@ -108,10 +299,86 @@ export default class ALReactInterface extends React.Component {
       "tutor_mode" : this.props.tutor_mode,
     }
     // this.state = {prob_obj : null};
-  }
+  };
+
 
   onInteractionTransition(current){
     console.log("#",current.value, ":", current.context, current)
+
+    //check whether the current.value is a start state
+    if (current.value == "Finalizing_Start_State") {
+      let startingNodeCertain = createNode("State 0", dataCertain.nextID, true, current.context.app.tutor.current.start_state_history[startingStateCount])
+      let startingNodeUncertain = createNode("State 0", dataUncertain.nextID, true, current.context.app.tutor.current.start_state_history[startingStateCount])
+      startingStateCount++;
+
+      addToGraph(startingNodeUncertain, null, true, true, false, dataUncertain);
+      addToGraph(startingNodeCertain, null, true, true, false, dataCertain);
+
+      let startNodeID = getNodeIDWithSameContent(startingNodeCertain, dataCertain.nodes);
+      let startNodeIDUncertain = getNodeIDWithSameContent(startNodeIDUncertain, dataUncertain.nodes);
+      dataUncertain.currentNodeID = startNodeIDUncertain;
+      dataCertain.currentNodeID = startNodeID;
+
+    } else if (current.value == "Querying_Apprentice" && current.context.state) {
+      let currentState = current.context.state;
+
+      if (currentState != undefined) {
+        let newNode = createNode("State " + this.graphData.nextID, this.graphData.nextID, true, currentState)
+        let newNodeCertain = createNode("State " + this.graphdataCertain.nextID, this.graphdataCertain.nextID, true, currentState)
+        let newLink = createLink(this.graphData.currentNodeID, this.graphData.nextID, "", true);
+        let newLinkCertain = createLink(this.graphdataCertain.currentNodeID, this.graphdataCertain.nextID, "", true);
+
+        addToGraph(newNodeCertain, newLinkCertain, false, true, false, dataCertain);
+        addToGraph(newNode, newLink, false, true, false, dataUncertain);
+
+        let nodeID = getNodeIDWithSameContent(newNodeCertain, dataCertain.nodes);
+        let nodeIDUncertain = getNodeIDWithSameContent(newNode, dataUncertain.nodes);
+
+        dataUncertain.currentNodeID = nodeIDUncertain;
+        dataCertain.currentNodeID = nodeID;
+      }
+
+    } else if (current.value["Waiting_User_Feedback"] == "Waiting_Yes_No_Feedback"){
+      let AL_guesses = current.context.skill_applications
+
+      if (AL_guesses != undefined) {
+        for (let i = 0; i < AL_guesses.length; i++) {
+          let guess = AL_guesses[i];
+          let guessState = JSON.parse(JSON.stringify(current.context.state));
+          guessState[guess.selection].value = guess.inputs.value;
+
+          let nodeIDToAdd = this.graphData.nextID;
+
+          let newNode = createNode("State " + nodeIDToAdd, nodeIDToAdd, true, guessState)
+          let newLink = createLink(this.graphData.currentNodeID, nodeIDToAdd, "", false)
+
+          addToGraph(newNode, newLink, false, true, false, dataUncertain);
+
+          if (guess.action == "UpdateTextField") {
+
+            let fakeContext = {...current.context};
+            fakeContext.state = guessState;
+
+            this.network_layer.queryApprentice(fakeContext).then(result => {
+              if (result != null) {
+                let nextSteps = result.responses
+                for (let i = 0; i < nextSteps.length; i++) {
+                  let response = nextSteps[i];
+                  let guessStateCopy = JSON.parse(JSON.stringify(guessState));
+                  guessStateCopy[response.selection].value = response.inputs.value;
+
+                  let newNode2 = createNode("State " + this.graphData.nextID, this.graphData.nextID, true, guessStateCopy);
+                  let newLink2 = createLink(nodeIDToAdd, this.graphData.nextID, "", false)
+
+                  addToGraph(newNode2, newLink2, false, true, false, dataUncertain);
+                } 
+              }
+            });
+          }
+        }
+      }
+    }
+
 
     var standard_props = {interactions_state: current,
                           interactions_service : this.interactions_service}
@@ -135,8 +402,6 @@ export default class ALReactInterface extends React.Component {
         problem_description : c.problem_description || "???"
       })  
     }
-    
-
   }
 
   changeInteractionMode(d){
@@ -160,7 +425,6 @@ export default class ALReactInterface extends React.Component {
     console.log("MOUNTED")
     var tutor, nl, wd,tf
     [tutor, nl, wd,tf] = [this.tutor.current,this.network_layer,this.props.working_dir,this.props.training_file]
-    
 
     // this.setState({
      
@@ -259,21 +523,21 @@ export default class ALReactInterface extends React.Component {
       </View>
     }else{
       lower_display = 
-      <View style={styles.controls}>
-        {!this.state.tutor_mode &&
-        <View style={styles.skill_panel}>
-          <SkillPanel ref={this.skill_panel}
-          {...this.state.default_props}
-          {...this.state.skill_panel_props}/>
+        <View style={styles.controls}>
+          {!this.state.tutor_mode &&
+          <View style={styles.skill_panel}>
+            <SkillPanel ref={this.skill_panel}
+            {...this.state.default_props}
+            {...this.state.skill_panel_props}/>
+          </View>
+          }
+          <View style={styles.buttons}>
+            <Buttons ref={this.buttons}
+            {...this.state.default_props}
+            {...this.state.buttons_props}
+            {...{tutor_mode: this.state.tutor_mode}}/>
+          </View>
         </View>
-        }
-        <View style={styles.buttons}>
-          <Buttons ref={this.buttons}
-          {...this.state.default_props}
-          {...this.state.buttons_props}
-          {...{tutor_mode: this.state.tutor_mode}}/>
-        </View>
-      </View>
     }
     
     // <View style={styles.overlay}>
@@ -283,37 +547,37 @@ export default class ALReactInterface extends React.Component {
         // </View>
     console.log("TRANING MACHINE STATE",this.state.Training_Machine_State)
     return (
-  	<View style={styles.container}>
-  		<View style={styles.ctat_tutor}>
-        {(this.state.Training_Machine_State == "Creating_Agent") //||
-          // this.state.Interactions_Machine_State == "Querying_Apprentice" ||
-          // this.state.Interactions_Machine_State == "Sending_Feedback")
-          &&
-          <View style={styles.overlay}>
-            <Spinner
-              color={'#000000'}
-              size={150}
-              visible={true}
-              textContent={'Loading...'}
-              textStyle={styles.spinnerTextStyle}
-            />
-          </View> 
-        }
-        
-  			<Tutor
-          //tutor_props = {this.state.prob_obj}
-          ref={this.tutor}//{function(tutor) {window.tutor = tutor; console.log("TUTOR IS:",tutor)}}
-          id="tutor_iframe"
-          //current_state={ctat_state_machine}
-          //sm_service={ctat_state_machine_service}
-          interactive={false}
-          {...this.state.default_props}
-          {...this.state.tutor_props}
-        />
-  		</View>
-
-  		{lower_display}
-  	</View>
+      //whole view
+      <View style={styles.container}>
+  		  <View style={styles.ctat_tutor}>
+          {(this.state.Training_Machine_State == "Creating_Agent") //||
+            // this.state.Interactions_Machine_State == "Querying_Apprentice" ||
+            // this.state.Interactions_Machine_State == "Sending_Feedback")
+            &&
+            <View style={styles.overlay}>
+              <Spinner
+                color={'#000000'}
+                size={150}
+                visible={true}
+                textContent={'Loading...'}
+                textStyle={styles.spinnerTextStyle}
+              />
+            </View>
+          }
+          {/* <Graph graph = {this.graphdataCertain}/> */}
+          <Graph graph = {this.graphData}/>
+          <Tutor
+            //tutor_props = {this.state.prob_obj}
+            ref={this.tutor}//{function(tutor) {window.tutor = tutor; console.log("TUTOR IS:",tutor)}}
+            id="tutor_iframe"
+            // current_state={ctat_state_machine}
+            //sm_service={ctat_state_machine_service}
+            {...this.state.default_props}
+            {...this.state.tutor_props}
+          />
+        </View>
+  		  {lower_display}
+  	  </View>
     );
   }
 }
@@ -371,12 +635,9 @@ const styles = StyleSheet.create({
         // flexGrow: 100,
         flex: 65,
         margin: 4,
+        flexDirection: "row"
         // flex: 1,
         // flexBasis: 65,
-        
-        
-        
-
       },
       prompt : {
         flex: 35,
